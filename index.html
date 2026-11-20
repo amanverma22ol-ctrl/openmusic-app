@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenMusic — Open-Source Apple Music Style Web Player</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          },
+          colors: {
+            appleRed: '#fa243c',
+            applePink: '#ff3b5c',
+            appleDark: '#0d0d0f',
+            appleSidebar: '#161618',
+            appleCard: '#1e1e22',
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Custom scrollbar for Apple Music look */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Frosted Glass Effects */
+    .glass-panel {
+      background: rgba(24, 24, 28, 0.72);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+    }
+    .glass-player {
+      background: rgba(28, 28, 32, 0.82);
+      backdrop-filter: blur(32px) saturate(200%);
+      -webkit-backdrop-filter: blur(32px) saturate(200%);
+    }
+
+    /* Custom Range Sliders */
+    input[type="range"].apple-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"].apple-slider::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 9999px;
+    }
+    input[type="range"].apple-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ffffff;
+      margin-top: -4px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+      transition: transform 0.15s ease;
+    }
+    input[type="range"].apple-slider:hover::-webkit-slider-thumb {
+      transform: scale(1.25);
+    }
+
+    /* Lyrics Line Transitions (Apple Music Style) */
+    .lyric-line {
+      transition: all 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      transform-origin: left center;
+    }
+    .lyric-active {
+      color: #ffffff;
+      opacity: 1;
+      transform: scale(1.04);
+      text-shadow: 0 0 24px rgba(255, 255, 255, 0.25);
+    }
+    .lyric-inactive {
+      color: rgba(255, 255, 255, 0.35);
+      filter: blur(0.4px);
+    }
+    .lyric-inactive:hover {
+      color: rgba(255, 255, 255, 0.75);
+      filter: blur(0px);
+    }
+
+    /* Ambient Animated Background Mesh for Lyrics View */
+    @keyframes pulseSlow {
+      0%, 100% { transform: scale(1) translate(0, 0); }
+      50% { transform: scale(1.12) translate(2%, -2%); }
+    }
+    .ambient-blob {
+      animation: pulseSlow 12s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="bg-[#0d0d0f] text-white font-sans antialiased selection:bg-appleRed selection:text-white overflow-hidden h-screen flex flex-col">
+
+  <!-- Toast Notification Container (Replaces alert()) -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Main Workspace Wrapper -->
+  <div class="flex flex-1 overflow-hidden relative">
+
+    <!-- Mobile Sidebar Backdrop -->
+    <div id="sidebar-backdrop" onclick="toggleMobileSidebar(false)" class="fixed inset-0 bg-black/60 z-30 hidden lg:hidden backdrop-blur-sm"></div>
+
+    <!-- Left Sidebar (Apple Music Aesthetic) -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-64 bg-[#161618]/95 lg:bg-[#161618] border-r border-white/10 flex flex-col justify-between transition-transform duration-300 -translate-x-full lg:translate-x-0">
+      <div class="p-4 flex flex-col gap-5 overflow-y-auto">
+        <!-- Brand Header + Open Source Badge -->
+        <div class="flex items-center justify-between px-2 pt-1">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-[#fa243c] to-[#ff5e7e] flex items-center justify-center shadow-lg shadow-appleRed/30">
+              <i data-lucide="music" class="w-4 h-4 text-white"></i>
+            </div>
+            <div>
+              <span class="font-bold text-lg tracking-tight">OpenMusic</span>
+              <span class="ml-1.5 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-white/10 text-gray-300">OSS</span>
+            </div>
+          </div>
+          <button onclick="toggleMobileSidebar(false)" class="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Search Input in Sidebar -->
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input
+            id="sidebar-search-input"
+            type="text"
+            placeholder="Search online songs..."
+            class="w-full bg-[#242428] text-sm text-white placeholder-gray-400 pl-9 pr-8 py-2 rounded-xl border border-white/5 focus:outline-none focus:border-appleRed/60 focus:ring-1 focus:ring-appleRed/60 transition"
+          />
+          <button id="clear-search-btn" onclick="clearSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+            <i data-lucide="x-circle" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Navigation Menu -->
+        <nav class="space-y-1">
+          <p class="px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Apple Music</p>
+          <button onclick="switchTab('listen')" id="nav-listen" class="nav-btn w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium bg-white/10 text-appleRed transition">
+            <i data-lucide="play-circle" class="w-4 h-4"></i>
+            <span>Listen Now</span>
+          </button>
+          <button onclick="switchTab('browse')" id="nav-browse" class="nav-btn w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white transition">
+            <i data-lucide="layout-grid" class="w-4 h-4 text-appleRed"></i>
+            <span>Browse Online</span>
+          </button>
+          <button onclick="switchTab('radio')" id="nav-radio" class="nav-btn w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white transition">
+            <i data-lucide="radio" class="w-4 h-4 text-appleRed"></i>
+            <span>Live Streams</span>
+          </button>
+        </nav>
+
+        <!-- Library Section -->
+        <nav class="space-y-1">
+          <p class="px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Library</p>
+          <button onclick="switchTab('favorites')" id="nav-favorites" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white transition">
+            <span class="flex items-center gap-3">
+              <i data-lucide="heart" class="w-4 h-4 text-appleRed"></i>
+              <span>Favorites</span>
+            </span>
+            <span id="fav-count" class="text-xs bg-white/10 px-2 py-0.5 rounded-full text-gray-300">0</span>
+          </button>
+          <button onclick="switchTab('queue')" id="nav-queue" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white transition">
+            <span class="flex items-center gap-3">
+              <i data-lucide="list-music" class="w-4 h-4 text-appleRed"></i>
+              <span>Up Next Queue</span>
+            </span>
+            <span id="queue-count" class="text-xs bg-white/10 px-2 py-0.5 rounded-full text-gray-300">0</span>
+          </button>
+        </nav>
+
+        <!-- Playlists -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between px-3 mb-1.5">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Playlists</p>
+            <button onclick="createNewPlaylist()" title="New Playlist" class="text-gray-400 hover:text-appleRed transition">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <div id="playlist-list" class="space-y-1"></div>
+        </div>
+      </div>
+
+      <!-- Open Source Repo Info Footer -->
+      <div class="p-4 border-t border-white/10">
+        <button onclick="toggleOSSModal(true)" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition text-left">
+          <div class="flex items-center gap-2.5">
+            <i data-lucide="github" class="w-4 h-4 text-white"></i>
+            <div>
+              <p class="text-xs font-semibold text-white">Open Source MIT</p>
+              <p class="text-[11px] text-gray-400">View architecture & APIs</p>
+            </div>
+          </div>
+          <i data-lucide="external-link" class="w-3.5 h-3.5 text-gray-400"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Center Main Content Feed -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-[#1a1a1f] via-[#111114] to-[#0d0d0f]">
+      <!-- Top Bar (Mobile Menu + Quick Search + Lyrics Panel Toggle) -->
+      <header class="h-16 px-4 md:px-8 border-b border-white/10 flex items-center justify-between gap-4 shrink-0 glass-panel z-20">
+        <div class="flex items-center gap-3 flex-1">
+          <button onclick="toggleMobileSidebar(true)" class="lg:hidden p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-200">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          <h1 id="view-title" class="text-xl md:text-2xl font-bold tracking-tight truncate">Listen Now</h1>
+        </div>
+
+        <!-- Quick Online Search Bar (Top) -->
+        <form onsubmit="handleTopSearch(event)" class="hidden sm:flex items-center relative w-72 md:w-96">
+          <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3.5"></i>
+          <input
+            id="top-search-input"
+            type="text"
+            placeholder="Search any song, artist, or genre online..."
+            class="w-full bg-white/10 hover:bg-white/15 focus:bg-[#242429] text-sm text-white placeholder-gray-400 pl-10 pr-20 py-2 rounded-full border border-white/10 focus:outline-none focus:border-appleRed transition"
+          />
+          <button type="submit" class="absolute right-1.5 bg-appleRed hover:bg-applePink text-white text-xs font-semibold px-3 py-1 rounded-full transition">
+            Stream
+          </button>
+        </form>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-2">
+          <button
+            onclick="toggleLyricsDrawer()"
+            id="top-lyrics-btn"
+            class="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/15 text-white border border-white/10 transition"
+            title="Toggle Synced Lyrics"
+          >
+            <i data-lucide="mic-2" class="w-4 h-4 text-appleRed"></i>
+            <span class="hidden md:inline">Lyrics</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Content Area -->
+      <div id="main-scroll-area" class="flex-1 overflow-y-auto p-4 md:p-8 pb-32 space-y-8">
+        <!-- Dynamic Content Rendered via JS -->
+      </div>
+    </main>
+
+    <!-- Right / Full-Screen Synced Lyrics Panel (Apple Music Signature Feature) -->
+    <section
+      id="lyrics-panel"
+      class="fixed lg:static inset-0 lg:inset-auto z-30 lg:w-[400px] xl:w-[450px] border-l border-white/10 bg-[#121216] flex flex-col transition-all duration-300 translate-x-full lg:translate-x-0"
+    >
+      <!-- Ambient Dynamic Glow Behind Lyrics -->
+      <div class="absolute inset-0 overflow-hidden pointer-events-none opacity-45">
+        <div id="lyrics-glow-1" class="ambient-blob absolute -top-20 -left-20 w-80 h-80 rounded-full bg-appleRed/30 blur-[90px]"></div>
+        <div id="lyrics-glow-2" class="ambient-blob absolute bottom-10 -right-20 w-80 h-80 rounded-full bg-purple-600/25 blur-[90px]" style="animation-delay: -5s;"></div>
+      </div>
+
+      <!-- Lyrics Header -->
+      <div class="relative z-10 px-6 py-4 border-b border-white/10 flex items-center justify-between glass-panel">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-appleRed animate-pulse"></span>
+          <h2 class="text-sm font-bold tracking-wide uppercase text-gray-200">Live Synced Lyrics</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            onclick="toggleAutoScrollLyrics()"
+            id="autoscroll-badge"
+            class="text-[11px] font-medium px-2.5 py-1 rounded-full bg-appleRed/20 text-appleRed border border-appleRed/30 transition"
+          >
+            Auto-Sync ON
+          </button>
+          <button onclick="toggleLyricsDrawer(false)" class="lg:hidden p-1.5 rounded-lg bg-white/10 text-gray-300 hover:text-white">
+            <i data-lucide="chevron-down" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Current Song Mini Banner in Lyrics -->
+      <div class="relative z-10 px-6 py-4 flex items-center gap-3.5 border-b border-white/5 bg-black/20">
+        <img
+          id="lyrics-cover"
+          src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&q=80"
+          onerror="this.src='https://placehold.co/300x300/1e1e22/fa243c?text=OpenMusic'"
+          alt="Album Cover"
+          class="w-12 h-12 rounded-xl object-cover shadow-lg"
+        />
+        <div class="min-w-0 flex-1">
+          <p id="lyrics-song-title" class="text-sm font-bold text-white truncate">Select a track</p>
+          <p id="lyrics-song-artist" class="text-xs text-gray-400 truncate">OpenMusic Streaming</p>
+        </div>
+        <a
+          id="google-lyrics-link"
+          href="https://www.google.com/search?q=song+lyrics"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 shrink-0 transition"
+          title="Search full licensed lyrics on Google"
+        >
+          <span>Full Lyrics</span>
+          <i data-lucide="external-link" class="w-3 h-3"></i>
+        </a>
+      </div>
+
+      <!-- Real-Time Scrolling Lyrics Container -->
+      <div id="lyrics-scroll-container" class="relative z-10 flex-1 overflow-y-auto px-6 py-10 space-y-6 scroll-smooth">
+        <!-- Synced lyric lines injected dynamically -->
+      </div>
+
+      <!-- Lyrics Footer Attribution -->
+      <div class="relative z-10 px-6 py-3 border-t border-white/10 bg-black/30 text-[11px] text-gray-400 flex items-center justify-between">
+        <span>Click any line to seek playback</span>
+        <span id="lyrics-source-label">Time-Synced LRC Engine</span>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Bottom Floating Glass Playback Bar (Apple Music Style) -->
+  <footer class="h-24 glass-player border-t border-white/10 px-4 md:px-6 flex items-center justify-between gap-4 z-40 shrink-0">
+    <!-- Left: Track Info & Artwork -->
+    <div class="flex items-center gap-3.5 w-1/3 min-w-0">
+      <div class="relative group shrink-0">
+        <img
+          id="player-cover"
+          src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&q=80"
+          onerror="this.src='https://placehold.co/300x300/1e1e22/fa243c?text=OpenMusic'"
+          alt="Now Playing"
+          class="w-14 h-14 rounded-xl object-cover shadow-xl border border-white/10"
+        />
+        <button onclick="toggleLyricsDrawer(true)" class="lg:hidden absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition">
+          <i data-lucide="maximize-2" class="w-4 h-4 text-white"></i>
+        </button>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h4 id="player-title" class="text-sm font-semibold text-white truncate">Midnight Horizon</h4>
+          <span class="hidden sm:inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-gray-300">LOSSLESS</span>
+        </div>
+        <p id="player-artist" class="text-xs text-gray-400 truncate mt-0.5">OpenAudio Collective</p>
+      </div>
+      <button onclick="toggleFavoriteCurrent()" id="player-fav-btn" class="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-appleRed transition shrink-0" title="Favorite">
+        <i data-lucide="heart" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Center: Transport Controls & Scrubber -->
+    <div class="flex flex-col items-center justify-center w-1/3 max-w-xl">
+      <div class="flex items-center gap-4 md:gap-6">
+        <button onclick="toggleShuffle()" id="shuffle-btn" class="text-gray-400 hover:text-white transition" title="Shuffle">
+          <i data-lucide="shuffle" class="w-4 h-4"></i>
+        </button>
+        <button onclick="playPrevious()" class="text-gray-200 hover:text-white transition" title="Previous">
+          <i data-lucide="skip-back" class="w-5 h-5 fill-current"></i>
+        </button>
+        <button
+          onclick="togglePlayPause()"
+          id="play-pause-btn"
+          class="w-10 h-10 rounded-full bg-white text-black hover:scale-105 active:scale-95 flex items-center justify-center shadow-lg transition"
+          title="Play / Pause"
+        >
+          <i data-lucide="play" id="play-icon" class="w-5 h-5 fill-current ml-0.5"></i>
+        </button>
+        <button onclick="playNext()" class="text-gray-200 hover:text-white transition" title="Next">
+          <i data-lucide="skip-forward" class="w-5 h-5 fill-current"></i>
+        </button>
+        <button onclick="toggleRepeat()" id="repeat-btn" class="text-gray-400 hover:text-white transition" title="Repeat">
+          <i data-lucide="repeat" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="w-full flex items-center gap-2.5 mt-2">
+        <span id="current-time" class="text-[11px] font-medium text-gray-400 w-9 text-right tabular-nums">0:00</span>
+        <input
+          id="seek-slider"
+          type="range"
+          min="0"
+          max="100"
+          value="0"
+          step="0.1"
+          class="apple-slider flex-1 h-1 bg-white/20 rounded-full"
+        />
+        <span id="total-duration" class="text-[11px] font-medium text-gray-400 w-9 tabular-nums">0:00</span>
+      </div>
+    </div>
+
+    <!-- Right: Volume, Lyrics & Queue Controls -->
+    <div class="flex items-center justify-end gap-3 w-1/3">
+      <button onclick="toggleLyricsDrawer()" class="p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-appleRed transition" title="Synced Lyrics">
+        <i data-lucide="quote" class="w-4 h-4"></i>
+      </button>
+      <button onclick="switchTab('queue')" class="hidden sm:flex p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition" title="Up Next Queue">
+        <i data-lucide="list-ordered" class="w-4 h-4"></i>
+      </button>
+      <div class="hidden md:flex items-center gap-2 w-2
